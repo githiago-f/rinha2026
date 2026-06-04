@@ -46,7 +46,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-COPY --from=build /src/zig-out/bin/seu-binario /app/server
+COPY --from=build /src/zig-out/bin/rinhavec /app/server
 COPY --from=build /src/rinha.vec /app/rinha.vec
 COPY --from=build /src/normalization.json /app/normalization.json
 COPY --from=build /src/mcc_risk.json /app/mcc_risk.json
