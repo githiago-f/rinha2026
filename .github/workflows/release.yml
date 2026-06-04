@@ -1,0 +1,88 @@
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+
+  build-and-push:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+  update-submission:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Build submission directory
+        run: |
+
+          mkdir submission
+
+          cp docker-compose.yml submission/docker-compose.yml
+          cp nginx.conf submission/nginx.conf
+          cp info.json submission/info.json
+
+          IMAGE_TAG="${GITHUB_REF_NAME}"
+
+          sed -i \
+            "s|\${IMAGE_TAG}|${IMAGE_TAG}|g" \
+            submission/docker-compose.yml
+
+      - name: Publish submission branch
+        run: |
+          git checkout --orphan submission
+          git rm -rf . || true
+          cp -R submission/* .
+          git add .
+          git commit -m "submission ${GITHUB_REF_NAME}"
+          git push origin submission --force
