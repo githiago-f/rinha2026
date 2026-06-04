@@ -297,6 +297,12 @@ pub const RequestParser = struct {
             else
                 0;
 
+        const merchant_id =
+            if (after(merchant_section, "\"id\":")) |s|
+                parseString(s)
+            else
+                null;
+
         const online =
             std.mem.indexOf(
                 u8,
@@ -313,7 +319,7 @@ pub const RequestParser = struct {
 
         const mcc: u16 = @intCast(
             parseInt(parseString(
-                after(request, "\"mcc\":") orelse return error.InvalidRequest,
+                after(merchant_section, "\"mcc\":") orelse return error.InvalidRequest,
             ) orelse return error.InvalidRequest),
         );
 
@@ -372,39 +378,16 @@ pub const RequestParser = struct {
                 0;
 
         vec[11] = vector.SCALE;
+        if (merchant_id) |id| {
+            if (after(customer_section, "\"known_merchants\":")) |known| {
+                const end = std.mem.indexOfScalar(u8, known, ']') orelse 0;
+                const found = std.mem.indexOf(u8, known[0..end], id) != null;
 
-        if (after(request, "\"merchant_id\":")) |merchant_start| {
-            if (parseString(merchant_start)) |merchant_id| {
-                if (after(request, "\"known_merchants\":")) |known| {
-                    if (std.mem.indexOfScalar(u8, known, ']')) |end| {
-                        var tmp: [128]u8 = undefined;
-
-                        const needle =
-                            try std.fmt.bufPrint(
-                                &tmp,
-                                "\"{s}\"",
-                                .{merchant_id},
-                            );
-
-                        const found =
-                            std.mem.indexOf(
-                                u8,
-                                known[0..end],
-                                needle,
-                            ) != null;
-
-                        vec[11] =
-                            if (found)
-                                0
-                            else
-                                vector.SCALE;
-                    }
-                }
+                vec[11] = if (found) 0 else vector.SCALE;
             }
         }
 
         vec[12] = getMcc(self, mcc);
-
         vec[13] = encode01(merchant_avg / self.normalization.max_merchant_avg_amount);
 
         vec[14] = 0;
