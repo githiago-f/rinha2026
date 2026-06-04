@@ -1,5 +1,6 @@
 const std = @import("std");
-const KdTree = @import("kdtree").KdTree;
+
+const dm = @import("data-model.zig");
 
 pub const DIMENSIONS = 16;
 pub const SCALE = 10000;
@@ -8,90 +9,72 @@ pub const Vec = @Vector(DIMENSIONS, i16);
 const print = std.debug.print;
 const math = std.math;
 
-const PartVec = @Vector(8, i16);
+const PartVec = @Vector(8, i32);
 
-pub fn distance(a: Vec, b: Vec) i32 {
-    const diff: Vec = a - b;
+pub fn bucketKey(v: Vec) u4 {
+    const online = @as(u4, @intFromBool(v[9] > 5000));
+    const card_present = @as(u4, @intFromBool(v[10] > 5000));
+    const unknown = @as(u4, @intFromBool(v[11] > 5000));
+    const has_history = @as(u4, @intFromBool(v[5] >= 0));
 
-    const lo: PartVec = diff[0..8].*;
-    const hi: PartVec = diff[8..16].*;
-
-    const lo_sq = lo * lo;
-    const hi_sq = hi * hi;
-
-    return @reduce(.Add, lo_sq) +
-        @reduce(.Add, hi_sq);
+    return (online << 3) |
+        (card_present << 2) |
+        (unknown << 1) |
+        has_history;
 }
 
-pub const SearchResult = packed struct {
+const SearchResult = struct {
     index: u32,
-    distance: i32,
+    distance: i64,
 };
 
-pub fn nearest(tree: *KdTree, root: u32, query: Vec) SearchResult {
-    var best = SearchResult{ .index = 0, .distance = std.math.maxInt(i32) };
+const TopK = struct {
+    items: [5]SearchResult = [_]SearchResult{
+        .{ .index = 0, .distance = std.math.maxInt(i32) },
+        .{ .index = 0, .distance = std.math.maxInt(i32) },
+        .{ .index = 0, .distance = std.math.maxInt(i32) },
+        .{ .index = 0, .distance = std.math.maxInt(i32) },
+        .{ .index = 0, .distance = std.math.maxInt(i32) },
+    },
 
-    var stack: [128]u32 = undefined;
-    var stack_len: usize = 0;
+    pub fn insert(self: *TopK, item: SearchResult) void {
+        if (item.distance >= self.items[0].distance)
+            return;
 
-    stack[stack_len] = root;
-    stack_len += 1;
+        self.items[0] = item;
 
-    while (stack_len > 0) {
-        stack_len -= 1;
-
-        const node_index = stack[stack_len];
-        const node = tree.nodes.items[node_index];
-
-        if (node.is_leaf == 1) {
-            const start = node.start;
-            const end = start + node.count;
-
-            for (tree.indices[start..end]) |vec_index| {
-                const vec: Vec = tree.vectors[vec_index..DIMENSIONS].*;
-
-                const dist = distance(query, vec);
-
-                if (dist < best.distance) {
-                    best.distance = dist;
-                    best.index = vec_index;
-                }
+        inline for (0..4) |i| {
+            if (self.items[i].distance < self.items[i + 1].distance) {
+                std.mem.swap(SearchResult, &self.items[i], &self.items[i + 1]);
             }
-
-            continue;
-        }
-
-        const axis = node.axis;
-
-        const query_value = query[axis];
-
-        const diff = @as(i32, query_value) - @as(i32, node.split);
-        const diff_sq = diff * diff;
-
-        const left: u32 = @intCast(node.left);
-
-        const right: u32 = @intCast(node.right);
-
-        const first =
-            if (query_value < node.split)
-                left
-            else
-                right;
-
-        const second =
-            if (query_value < node.split)
-                right
-            else
-                left;
-
-        stack[stack_len] = first;
-        stack_len += 1;
-
-        if (diff_sq < best.distance) {
-            stack[stack_len] = second;
-            stack_len += 1;
         }
     }
+};
 
-    return best;
+pub fn nearest5(db: *dm.Database, query: Vec) [5]SearchResult {
+    const key = bucketKey(query);
+
+    const start = db.buckets_offsets[key];
+    const end = start + db.buckets_lengths[key];
+
+    var best = TopK{};
+
+    var i = start;
+
+    while (i < end) : (i += 1) {
+        const dist = distance(query, db.vectors[i]);
+        best.insert(.{ .index = i, .distance = dist });
+    }
+
+    return best.items;
+}
+
+pub inline fn distance(a: Vec, b: Vec) i64 {
+    const av: @Vector(16, i32) = a;
+    const bv: @Vector(16, i32) = b;
+
+    const diff = av - bv;
+    const sq: @Vector(16, i64) = diff * diff;
+
+    return @reduce(.Add, sq);
 }
