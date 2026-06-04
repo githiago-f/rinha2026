@@ -14,39 +14,21 @@ pub fn build(b: *std.Build) void {
         .preferred_optimize_mode = .ReleaseFast,
     });
 
-    const vector_mod = b.addModule("vector", .{
-        .root_source_file = b.path("src/vector.zig"),
-        .target = target,
-    });
-
-    const kdtree_mod = b.addModule("kdtree", .{
-        .root_source_file = b.path("src/KdTree.zig"),
-        .target = target,
-    });
-
     const exe = b.addExecutable(.{
         .name = "rinhavec",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{
-                .{ .name = "kdtree", .module = kdtree_mod },
-                .{ .name = "vector", .module = vector_mod },
-            },
         }),
     });
 
     const prepare_exe = b.addExecutable(.{
         .name = "prepare",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/prepare.zig"),
+            .root_source_file = b.path("src/prepare.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{
-                .{ .name = "kdtree", .module = kdtree_mod },
-                .{ .name = "vector", .module = vector_mod },
-            },
         }),
     });
 
@@ -69,19 +51,19 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    const mod_tests = b.addTest(.{
-        .root_module = vector_mod,
-    });
+    // const mod_tests = b.addTest(.{
+    //     .root_module = vector_mod,
+    // });
 
-    const run_mod_tests = b.addRunArtifact(mod_tests);
+    // const run_mod_tests = b.addRunArtifact(mod_tests);
 
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
+    // const exe_tests = b.addTest(.{
+    //     .root_module = exe.root_module,
+    // });
 
-    const run_exe_tests = b.addRunArtifact(exe_tests);
+    // const run_exe_tests = b.addRunArtifact(exe_tests);
 
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_mod_tests.step);
-    test_step.dependOn(&run_exe_tests.step);
+    // const test_step = b.step("test", "Run tests");
+    // test_step.dependOn(&run_mod_tests.step);
+    // test_step.dependOn(&run_exe_tests.step);
 }
