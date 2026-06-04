@@ -37,7 +37,7 @@ RUN gzip -dc references.json.gz > references.json \
 #
 # gera binário principal
 #
-RUN zig build -Doptimize=ReleaseFast
+RUN zig build --release=fast
 
 #
 # runtime
