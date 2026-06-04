@@ -15,12 +15,13 @@ pub fn main(init: std.process.Init) !void {
     var db = try dm.parseDatabase("rinha.vec", allocator, init.io);
     defer db.deinit();
 
-    // const risk_data = try std.Io.Dir.cwd().readFileAlloc(init.io, "mcc_risk.json", allocator, .limited(1_000_000));
+    const risk_data = try std.Io.Dir.cwd().readFileAlloc(init.io, "mcc_risk.json", allocator, .limited(1_000_000));
+    defer allocator.free(risk_data);
 
     const normalization = try req.NormalizationConstants.init(allocator, init.io, "normalization.json");
     defer normalization.deinit();
 
-    const requestParser: req.RequestParser = .init(allocator, normalization.value);
+    const requestParser: req.RequestParser = .init(allocator, risk_data, normalization.value);
     const req2 =
         \\{
         \\"id": "tx-3576980410",
@@ -87,21 +88,5 @@ pub fn main(init: std.process.Init) !void {
 
     var out: vector.Vec = @splat(@as(i16, 0));
     try requestParser.parse(request, &out);
-
-    print("request : {any}\n", .{out});
-
-    const nearest = vector.nearest5(&db, out);
-
     try requestParser.parse(req2, &out);
-
-    print("\n\nrequest : {any}\n\n\n", .{out});
-    const nearest2 = vector.nearest5(&db, out);
-
-    for (nearest) |n| {
-        print("nearest: {any},\nvec: {any},\nlabel: {}\n", .{ n, db.vectors[n.index], db.labels[n.index] });
-    }
-
-    for (nearest2) |n| {
-        print("nearest: {any},\nvec: {any},\nlabel: {}\n", .{ n, db.vectors[n.index], db.labels[n.index] });
-    }
 }

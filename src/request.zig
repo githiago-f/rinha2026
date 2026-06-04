@@ -28,15 +28,19 @@ pub const RequestParser = struct {
 
     mmcs: [10000]i16,
 
-    pub fn init(allocator: std.mem.Allocator, normalization: NormalizationConstants) RequestParser {
+    pub fn init(allocator: std.mem.Allocator, mmcs_file: []const u8, normalization: NormalizationConstants) RequestParser {
         var mmcs: [10000]i16 = undefined;
         @memset(&mmcs, 5000);
 
-        return .{
+        var self: RequestParser = .{
             .allocator = allocator,
             .normalization = normalization,
             .mmcs = mmcs,
         };
+
+        self.parseMccWeights(mmcs_file);
+
+        return self;
     }
 
     inline fn encode01(v: f32) i16 {
@@ -65,6 +69,38 @@ pub const RequestParser = struct {
         }
 
         return value;
+    }
+
+    fn parseMccWeights(self: *RequestParser, data: []const u8) void {
+        var pos: usize = 0;
+
+        while (pos < data.len) {
+            while (pos < data.len and data[pos] != '"')
+                pos += 1;
+
+            if (pos >= data.len)
+                break;
+
+            pos += 1;
+
+            const mcc =
+                (@as(u32, data[pos] - '0') * 1000) +
+                (@as(u32, data[pos + 1] - '0') * 100) +
+                (@as(u32, data[pos + 2] - '0') * 10) +
+                (@as(u32, data[pos + 3] - '0'));
+
+            pos += 5;
+
+            while (data[pos] != ':')
+                pos += 1;
+
+            pos += 1;
+
+            while (data[pos] == ' ' or data[pos] == '\n' or data[pos] == '\r')
+                pos += 1;
+
+            self.mmcs[mcc] = encode01(parseFloat(data[pos..]));
+        }
     }
 
     inline fn parseFloat(buf: []const u8) f32 {
