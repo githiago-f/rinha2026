@@ -68,7 +68,7 @@ jobs:
 
           mkdir submission
 
-          cp docker-compose.yml submission/docker-compose.yml
+          cp compose.yml submission/docker-compose.yml
           cp nginx.conf submission/nginx.conf
           cp info.json submission/info.json
 
