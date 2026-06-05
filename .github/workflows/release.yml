@@ -83,6 +83,7 @@ jobs:
           git checkout --orphan submission
           git rm -rf . || true
           cp -R submission/* .
+          rm -rf submission
           git add .
           git commit -m "submission ${GITHUB_REF_NAME}"
           git push origin submission --force
