@@ -21,9 +21,9 @@ services:
           memory: "30MB"
 
   api1:
-    # image: ghcr.io/githiago-f/rinha2026:latest
-    build:
-      context: .
+    image: ghcr.io/githiago-f/rinha2026:latest
+    # build:
+      # context: .
     hostname: api1
 
     deploy:
@@ -33,9 +33,9 @@ services:
           memory: "150MB"
 
   api2:
-    # image: ghcr.io/githiago-f/rinha2026:latest
-    build:
-      context: .
+    image: ghcr.io/githiago-f/rinha2026:latest
+    # build:
+      # context: .
     hostname: api2
 
     deploy:
