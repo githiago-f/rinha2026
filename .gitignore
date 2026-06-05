@@ -1,5 +1,7 @@
 .zig-cache/
 *.vec
+*.ndjson
 references.json
+test-data.json
 !info.json
 zig-out/

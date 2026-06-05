@@ -17,25 +17,29 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.10"
+          cpus: "0.05"
           memory: "30MB"
 
   api1:
-    image: ghcr.io/githiago-f/rinha2026:latest
+    # image: ghcr.io/githiago-f/rinha2026:latest
+    build:
+      context: .
     hostname: api1
 
     deploy:
       resources:
         limits:
-          cpus: "0.45"
+          cpus: "0.475"
           memory: "150MB"
 
   api2:
-    image: ghcr.io/githiago-f/rinha2026:latest
+    # image: ghcr.io/githiago-f/rinha2026:latest
+    build:
+      context: .
     hostname: api2
 
     deploy:
       resources:
         limits:
-          cpus: "0.45"
+          cpus: "0.475"
           memory: "150MB"

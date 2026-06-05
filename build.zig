@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "rinhavec",
+        .name = "server",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -32,23 +32,38 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    const bench_exe = b.addExecutable(.{
+        .name = "bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/benchmark.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     b.installArtifact(exe);
     b.installArtifact(prepare_exe);
+    b.installArtifact(bench_exe);
 
     const run_step = b.step("start", "Serve vector checker");
     const prepare_step = b.step("prepare", "Prepare vectors in bytes");
-
-    const prepare_cmd = b.addRunArtifact(prepare_exe);
-    if (b.args) |args| prepare_cmd.addArgs(args);
-    prepare_step.dependOn(&prepare_cmd.step);
+    const bench_step = b.step("bench", "Benchmark data buckets");
 
     const run_cmd = b.addRunArtifact(exe);
     run_step.dependOn(&run_cmd.step);
+
+    const prepare_cmd = b.addRunArtifact(prepare_exe);
+    prepare_step.dependOn(&prepare_cmd.step);
+
+    const bench_cmd = b.addRunArtifact(bench_exe);
+    bench_step.dependOn(&bench_cmd.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
 
     if (b.args) |args| {
         run_cmd.addArgs(args);
+        prepare_cmd.addArgs(args);
+        bench_cmd.addArgs(args);
     }
 
     // const mod_tests = b.addTest(.{
