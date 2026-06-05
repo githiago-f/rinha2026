@@ -16,7 +16,7 @@ const App = struct {
 };
 
 fn handler(buf: []u8, app: *const App, req: net.Request) net.Response {
-    if (req.method == .GET and std.mem.eql(u8, req.path, "/health")) {
+    if (req.method == .GET and std.mem.eql(u8, req.path, "/ready")) {
         return .{
             .status = 200,
             .content_type = "text/plain",
