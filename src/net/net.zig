@@ -27,6 +27,16 @@ pub fn linux_sysret(rc: usize) linux.E {
     return .SUCCESS;
 }
 
+pub fn printAddress(ip: u32, port: u16) void {
+    std.debug.print("{d}.{d}.{d}.{d}:{d}\n", .{
+        (ip >> 24) & 0xff,
+        (ip >> 16) & 0xff,
+        (ip >> 8) & 0xff,
+        ip & 0xff,
+        port,
+    });
+}
+
 pub fn Server(comptime Context: type) type {
     return struct {
         const Self = @This();
@@ -84,45 +94,99 @@ pub fn Server(comptime Context: type) type {
                 .zero = .{ 0, 0, 0, 0, 0, 0, 0, 0 },
             };
 
-            if (linux_sysret(linux.bind(fd, @ptrCast(&addr), @sizeOf(@TypeOf(addr)))) != .SUCCESS)
+            printAddress(addr.addr, self.port);
+
+            const bind = linux_sysret(linux.bind(fd, @ptrCast(&addr), @sizeOf(@TypeOf(addr))));
+
+            if (bind != .SUCCESS)
                 return error.CannotBindSocket;
-            if (linux_sysret(linux.listen(fd, 1024)) != .SUCCESS)
+
+            const accquire_fd = linux_sysret(linux.listen(fd, 4096));
+
+            if (accquire_fd != .SUCCESS)
                 return error.CannotStartListener;
 
-            var buf: [1024]u8 = undefined;
-            const ip = addr.addr;
-            const ipv4 = try std.fmt.bufPrint(
-                &buf,
-                "{d}.{d}.{d}.{d}",
-                .{
-                    (ip >> 24) & 0xff,
-                    (ip >> 16) & 0xff,
-                    (ip >> 8) & 0xff,
-                    ip & 0xff,
-                },
-            );
-            std.debug.print("Server listening at {s}:{d}\n", .{ ipv4, self.port });
+            const epfd = @as(i32, @intCast(@as(isize, @bitCast(linux.epoll_create1(0)))));
+            if (epfd < 0)
+                return error.CannotCreateEpoll;
+
+            defer _ = linux.close(epfd);
+
+            var ev = linux.epoll_event{
+                .events = linux.EPOLL.IN,
+                .data = .{ .fd = fd },
+            };
+
+            const listener = linux.epoll_ctl(epfd, linux.EPOLL.CTL_ADD, fd, &ev);
+            if (listener < 0)
+                return error.CannotRegisterListener;
+
+            var events: [256]linux.epoll_event = undefined;
 
             while (true) {
-                const rc = linux.accept4(fd, null, null, 0);
+                const ready = linux.epoll_wait(epfd, events[0..].ptr, events.len, 1000);
+                if (ready <= 0) continue;
 
-                if (linux_sysret(rc) != .SUCCESS) {
-                    continue;
+                var i: usize = 0;
+
+                while (i < @as(usize, @intCast(ready))) : (i += 1) {
+                    const event_fd = events[i].data.fd;
+
+                    if (event_fd == fd) {
+                        while (true) {
+                            const rc = linux.accept4(
+                                fd,
+                                null,
+                                null,
+                                linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC,
+                            );
+
+                            const err = linux_sysret(rc);
+
+                            if (err == .AGAIN)
+                                break;
+
+                            if (err != .SUCCESS)
+                                break;
+
+                            const conn: i32 =
+                                @intCast(@as(isize, @bitCast(rc)));
+
+                            var conn_ev = linux.epoll_event{
+                                .events = linux.EPOLL.IN |
+                                    linux.EPOLL.RDHUP |
+                                    linux.EPOLL.HUP,
+                                .data = .{ .fd = conn },
+                            };
+
+                            _ = linux.epoll_ctl(
+                                epfd,
+                                linux.EPOLL.CTL_ADD,
+                                conn,
+                                &conn_ev,
+                            );
+                        }
+                    } else {
+                        self.handleConnection(event_fd);
+
+                        _ = linux.epoll_ctl(
+                            epfd,
+                            linux.EPOLL.CTL_DEL,
+                            event_fd,
+                            null,
+                        );
+
+                        _ = linux.close(event_fd);
+                    }
                 }
-
-                const conn: i32 = @intCast(@as(isize, @bitCast(rc)));
-                self.handleConnection(conn);
             }
         }
 
         fn handleConnection(self: *const Self, fd: posix.socket_t) void {
-            defer _ = linux.close(fd);
-
             var buffer: [MAX_REQUEST_SIZE]u8 = undefined;
+            const n = linux.read(fd, &buffer, 16384);
 
-            const n = linux.read(fd, &buffer, 1024);
             if (linux_sysret(n) != .SUCCESS or n == 0) return;
-
             const raw = buffer[0..n];
 
             const req = parseRequest(raw) catch {
@@ -216,6 +280,7 @@ fn writeResponse(fd: posix.socket_t, resp: Response) void {
             200 => "OK",
             400 => "Bad Request",
             404 => "Not Found",
+            503 => "Bad Gateway",
             500 => "Internal Server Error",
             else => "OK",
         };

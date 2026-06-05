@@ -10,7 +10,7 @@ const math = std.math;
 const print = std.debug.print;
 
 const App = struct {
-    ready: bool = false,
+    io: std.Io,
     parser: *const rp.RequestParser,
     classifier: *const Classifier,
 };
@@ -18,7 +18,7 @@ const App = struct {
 fn handler(buf: []u8, app: *const App, req: net.Request) net.Response {
     if (req.method == .GET and std.mem.eql(u8, req.path, "/health")) {
         return .{
-            .status = if (app.ready) 200 else 503,
+            .status = 200,
             .content_type = "text/plain",
             .body = "OK",
         };
@@ -59,6 +59,8 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = arena.allocator();
 
+    const port = 8080;
+
     var db = try dm.parseDatabase("rinha.vec", allocator, init.io);
     defer db.deinit();
 
@@ -72,11 +74,11 @@ pub fn main(init: std.process.Init) !void {
     const req_parser: rp.RequestParser = .init(allocator, risk_data, normalization.value);
 
     const app: App = .{
+        .io = init.io,
         .classifier = &classifier,
         .parser = &req_parser,
-        .ready = true,
     };
 
-    const server: net.Server(App) = .init(8080, &app, handler);
+    const server: net.Server(App) = .init(port, &app, handler);
     try server.listen();
 }
