@@ -28,13 +28,13 @@ const SearchResult = struct {
     distance: i64,
 };
 
-const TopK = struct {
+pub const TopK = struct {
     items: [5]SearchResult = [_]SearchResult{
-        .{ .index = 0, .distance = std.math.maxInt(i32) },
-        .{ .index = 0, .distance = std.math.maxInt(i32) },
-        .{ .index = 0, .distance = std.math.maxInt(i32) },
-        .{ .index = 0, .distance = std.math.maxInt(i32) },
-        .{ .index = 0, .distance = std.math.maxInt(i32) },
+        .{ .index = 0, .distance = std.math.maxInt(i64) },
+        .{ .index = 0, .distance = std.math.maxInt(i64) },
+        .{ .index = 0, .distance = std.math.maxInt(i64) },
+        .{ .index = 0, .distance = std.math.maxInt(i64) },
+        .{ .index = 0, .distance = std.math.maxInt(i64) },
     },
 
     pub fn insert(self: *TopK, item: SearchResult) void {
@@ -43,21 +43,22 @@ const TopK = struct {
 
         self.items[0] = item;
 
-        inline for (0..4) |i| {
-            if (self.items[i].distance < self.items[i + 1].distance) {
-                std.mem.swap(SearchResult, &self.items[i], &self.items[i + 1]);
-            }
+        var i: usize = 0;
+
+        while (i < 4 and self.items[i].distance < self.items[i + 1].distance) : (i += 1) {
+            std.mem.swap(SearchResult, &self.items[i], &self.items[i + 1]);
+        }
+
+        for (1..5) |j| {
+            std.debug.assert(self.items[j - 1].distance >=
+                self.items[j].distance);
         }
     }
 };
 
-pub fn nearest5(db: *dm.Database, query: Vec) [5]SearchResult {
-    const key = bucketKey(query);
-
+fn search(db: *dm.Database, query: Vec, key: u4, best: *TopK) void {
     const start = db.buckets_offsets[key];
     const end = start + db.buckets_lengths[key];
-
-    var best = TopK{};
 
     var i = start;
 
@@ -65,6 +66,22 @@ pub fn nearest5(db: *dm.Database, query: Vec) [5]SearchResult {
         const dist = distance(query, db.vectors[i]);
         best.insert(.{ .index = i, .distance = dist });
     }
+}
+
+pub fn fullseach(db: *dm.Database, query: Vec) [5]SearchResult {
+    var best = TopK{};
+    for (0..db.vectors.len) |i| {
+        const dist = distance(query, db.vectors[i]);
+        best.insert(.{ .index = @intCast(i), .distance = dist });
+    }
+    return best.items;
+}
+
+pub fn nearest5(db: *dm.Database, query: Vec) [5]SearchResult {
+    const key = bucketKey(query);
+
+    var best = TopK{};
+    search(db, query, key, &best);
 
     return best.items;
 }
