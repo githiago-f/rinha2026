@@ -11,6 +11,9 @@ pub const Parser = struct {
     size: u32 = 0,
     pos: usize = 0,
 
+    legits: u32 = 0,
+    frauds: u32 = 0,
+
     pub fn init(data: []const u8) Parser {
         const size = countReferences(data);
         return .{ .data = data, .size = size };
@@ -38,7 +41,6 @@ pub const Parser = struct {
         self.pos += 1;
 
         var vec: vector.Vec = undefined;
-
         self.seekVector();
 
         inline for (0..vector.DIMENSIONS) |i| {
@@ -49,6 +51,12 @@ pub const Parser = struct {
         self.seekLabel();
 
         const legit = self.data[self.pos] == 'l';
+
+        if (legit) {
+            self.legits += 1;
+        } else {
+            self.frauds += 1;
+        }
 
         return .{
             .vector = vec,

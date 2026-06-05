@@ -36,7 +36,7 @@ pub fn main(init: std.process.Init) !void {
         init.io,
         input_file_path,
         allocator,
-        .limited(1_000_000_000),
+        .limited(1_300_000_000),
     );
     defer allocator.free(input_file_data);
 
@@ -47,7 +47,7 @@ pub fn main(init: std.process.Init) !void {
     var entries: []p.Entry = try allocator.alloc(p.Entry, parser.size);
     defer allocator.free(entries);
 
-    var counts: [DEF_LEAF_SIZE]u32 = [_]u32{0} ** DEF_LEAF_SIZE;
+    var counts: [leaf_size]u32 = [_]u32{0} ** leaf_size;
 
     var i: u32 = 0;
     while (parser.next()) |entry| {
@@ -59,10 +59,12 @@ pub fn main(init: std.process.Init) !void {
     }
     var end = ms.now(.awake, init.io).toMilliseconds();
 
+    print("[PREPARE] legits={d} frauds={d}", .{ parser.legits, parser.frauds });
+
     print("[PREPARE] loaded entries and bucket counts in {d}ms\n", .{end - start});
 
     i = 0;
-    var offsets: [DEF_LEAF_SIZE]u32 = [_]u32{0} ** DEF_LEAF_SIZE;
+    var offsets: [leaf_size]u32 = [_]u32{0} ** leaf_size;
     inline for (&offsets, counts) |*off, count| {
         off.* = i;
         i += count;
@@ -77,11 +79,12 @@ pub fn main(init: std.process.Init) !void {
     var labels: []bool = try allocator.alloc(bool, parser.size);
     defer allocator.free(labels);
 
-    var bucket_cursors: [DEF_LEAF_SIZE]u32 = [_]u32{0} ** DEF_LEAF_SIZE;
+    var bucket_cursors: [leaf_size]u32 = [_]u32{0} ** leaf_size;
     for (entries) |entry| {
         const key = vector.bucketKey(entry.vector);
 
-        const vector_index = bucket_cursors[key];
+        const vector_index = offsets[key] +
+            bucket_cursors[key];
         bucket_cursors[key] += 1;
 
         vectors[vector_index] = entry.vector;

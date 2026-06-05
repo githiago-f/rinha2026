@@ -29,6 +29,23 @@ pub const Database = struct {
         self.* = undefined;
     }
 
+    fn seekTo(writer: anytype, current_pos: *usize, target_pos: usize) !void {
+        std.debug.assert(target_pos >= current_pos.*);
+
+        const padding = target_pos - current_pos.*;
+
+        var buf: [64]u8 = [_]u8{0} ** 64;
+
+        var remaining = padding;
+        while (remaining > 0) {
+            const chunk = @min(remaining, buf.len);
+            try writer.writeAll(buf[0..chunk]);
+            remaining -= chunk;
+        }
+
+        current_pos.* = target_pos;
+    }
+
     pub fn writeTo(self: Database, writer: *std.Io.Writer) !void {
         const header_size = @sizeOf(Header);
 
@@ -54,17 +71,40 @@ pub const Database = struct {
             .vectors_offset = vectors_offset,
         };
 
+        var pos: usize = 0;
+
         try writer.writeAll(std.mem.asBytes(&header));
-        try writer.writeAll(std.mem.sliceAsBytes(self.buckets_offsets[0..16]));
-        try writer.writeAll(std.mem.sliceAsBytes(self.buckets_lengths[0..16]));
+        pos += @sizeOf(Header);
+
+        try seekTo(writer, &pos, bucket_offsets_offset);
+        try writer.writeAll(std.mem.sliceAsBytes(self.buckets_offsets));
+        pos += bucket_offsets_size;
+
+        try seekTo(writer, &pos, bucket_lengths_offset);
+        try writer.writeAll(std.mem.sliceAsBytes(self.buckets_lengths));
+        pos += bucket_lengths_size;
+
+        try seekTo(writer, &pos, vectors_offset);
         try writer.writeAll(std.mem.sliceAsBytes(self.vectors));
+        pos += vectors_size;
 
+        try seekTo(writer, &pos, labels_offset);
+
+        var frauds: u32 = 0;
+        var legits: u32 = 0;
+        var total: u32 = 0;
         for (self.labels) |label| {
-            const v: u8 =
-                @intFromBool(label);
-
+            const v: u8 = @intFromBool(label);
             try writer.writeAll(&.{v});
+            if (label) {
+                legits += 1;
+            } else {
+                frauds += 1;
+            }
+            total += 1;
         }
+
+        std.debug.print("DM: total={},frauds={d},legits={d}\n", .{ total, frauds, legits });
     }
 };
 
@@ -108,9 +148,18 @@ pub fn parseDatabase(file_name: []const u8, allocator: std.mem.Allocator, io: st
         header.vector_count,
     );
 
+    var frauds: u32 = 0;
+    var legits: u32 = 0;
     for (labels_bytes, 0..) |v, i| {
         labels[i] = v != 0;
+        if (v == 0) {
+            frauds += 1;
+        } else {
+            legits += 1;
+        }
     }
+
+    std.debug.print("OPEN: legits={d}, frauds={d}\n", .{ legits, frauds });
 
     return .{
         .buckets_lengths = bucket_lengths_ptr[0..header.bucket_count],
